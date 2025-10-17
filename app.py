@@ -1,37 +1,59 @@
-"""
-Live Hand Tracking - Streamlit
-By: Jaganmohan Rao Kuna
-"""
-
-import streamlit as st
 import cv2
 import mediapipe as mp
 import numpy as np
-from handTrackingModule import handDetector
+import streamlit as st
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
 
-# Streamlit Page
 st.set_page_config(page_title="Live Hand Tracking", layout="wide")
 st.title("🖐 Live Hand Tracking using MediaPipe")
+st.write("Real-time hand tracking using your browser webcam!")
 
-# Initialize Detector
-detector = handDetector(maxHands=2, detectionCon=0.5, trackCon=0.5)
+# ---------------- Hand Detector ----------------
+class handDetector:
+    def __init__(self, mode=False, maxHands=2, detectionCon=0.5, trackCon=0.5):
+        self.mode = mode
+        self.maxHands = maxHands
+        self.detectionCon = detectionCon
+        self.trackCon = trackCon
 
-# Display window for frames
-FRAME_WINDOW = st.image([])
+        self.mpHands = mp.solutions.hands
+        self.hands = self.mpHands.Hands(
+            static_image_mode=self.mode,
+            max_num_hands=self.maxHands,
+            min_detection_confidence=self.detectionCon,
+            min_tracking_confidence=self.trackCon
+        )
+        self.mpDraw = mp.solutions.drawing_utils
 
-# Start Webcam
-cap = cv2.VideoCapture(0)
+    def findHands(self, img, draw=True):
+        imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        self.results = self.hands.process(imgRGB)
 
-while True:
-    success, img = cap.read()
-    if not success:
-        st.warning("Cannot access webcam.")
-        break
+        if self.results.multi_hand_landmarks:
+            for handLms in self.results.multi_hand_landmarks:
+                if draw:
+                    self.mpDraw.draw_landmarks(
+                        img, handLms, self.mpHands.HAND_CONNECTIONS)
+        return img
 
-    img = cv2.flip(img, 1)  # Mirror view
-    img = detector.findHands(img, draw=True)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+# ---------------- WebRTC Processor ----------------
+detector = handDetector()
 
-    FRAME_WINDOW.image(img)
+class VideoProcessor(VideoProcessorBase):
+    def recv(self, frame):
+        img = frame.to_ndarray(format="bgr24")
+        img = detector.findHands(img)
+        return img
 
-cap.release()
+# ---------------- Streamlit WebRTC ----------------
+RTC_CONFIGURATION = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
+
+webrtc_streamer(
+    key="handtracking",
+    video_processor_factory=VideoProcessor,
+    rtc_configuration=RTC_CONFIGURATION,
+    media_stream_constraints={"video": True, "audio": False},
+    async_processing=True
+)
