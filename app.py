@@ -4,12 +4,13 @@ import numpy as np
 import streamlit as st
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
 
+# ---------------- Streamlit Page Config ----------------
 st.set_page_config(page_title="Live Hand Tracking", layout="wide")
 st.title("🖐 Live Hand Tracking using MediaPipe")
 st.write("Real-time hand tracking using your browser webcam!")
 
 # ---------------- Hand Detector ----------------
-class handDetector:
+class HandDetector:
     def __init__(self, mode=False, maxHands=2, detectionCon=0.5, trackCon=0.5):
         self.mode = mode
         self.maxHands = maxHands
@@ -27,17 +28,17 @@ class handDetector:
 
     def findHands(self, img, draw=True):
         imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        self.results = self.hands.process(imgRGB)
-
-        if self.results.multi_hand_landmarks:
-            for handLms in self.results.multi_hand_landmarks:
+        results = self.hands.process(imgRGB)
+        if results.multi_hand_landmarks:
+            for handLms in results.multi_hand_landmarks:
                 if draw:
                     self.mpDraw.draw_landmarks(
-                        img, handLms, self.mpHands.HAND_CONNECTIONS)
+                        img, handLms, self.mpHands.HAND_CONNECTIONS
+                    )
         return img
 
 # ---------------- WebRTC Processor ----------------
-detector = handDetector()
+detector = HandDetector()
 
 class VideoProcessor(VideoProcessorBase):
     def recv(self, frame):
@@ -45,7 +46,7 @@ class VideoProcessor(VideoProcessorBase):
         img = detector.findHands(img)
         return img
 
-# ---------------- Streamlit WebRTC ----------------
+# ---------------- WebRTC Streamer ----------------
 RTC_CONFIGURATION = RTCConfiguration(
     {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
 )
