@@ -11,16 +11,32 @@ st.write("Real-time hand tracking using your browser webcam!")
 # ---------------- WebRTC Processor ----------------
 detector = handDetector()
 
+# ---------------- WebRTC Processor ----------------
+# Replace your old VideoProcessor class with this one
 class VideoProcessor(VideoProcessorBase):
+    def __init__(self):
+        self.detector = handDetector(maxHands=1, detectionCon=0.5, trackCon=0.5)
+        self.frame_counter = 0
+
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
-        img = detector.findHands(img)
+        self.frame_counter += 1
+
+        if self.frame_counter % 2 == 0:
+            img = cv2.resize(img, (640, 480))
+            img = self.detector.findHands(img)
+
         return img
 
-# ---------------- WebRTC Streamer ----------------
-RTC_CONFIGURATION = RTCConfiguration(
-    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+# ---------------- Streamlit WebRTC ----------------
+webrtc_streamer(
+    key="handtracking",
+    video_processor_factory=VideoProcessor,
+    rtc_configuration=RTC_CONFIGURATION,
+    media_stream_constraints={"video": True, "audio": False},
+    async_processing=True
 )
+
 
 webrtc_streamer(
     key="handtracking",
@@ -29,3 +45,4 @@ webrtc_streamer(
     media_stream_constraints={"video": True, "audio": False},
     async_processing=True
 )
+
