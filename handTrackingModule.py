@@ -1,88 +1,31 @@
-"""
-Hand Tracking Module
-By: Murtaza Hassan
-Updated by: Jaganmohan Rao Kuna (for latest Mediapipe version)
-"""
-
 import cv2
-import mediapipe as mp
-import time
+import streamlit as st
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
+from handTrackingModule import handDetector  # import your existing class
 
+# ---------------- Streamlit Page Config ----------------
+st.set_page_config(page_title="Live Hand Tracking", layout="wide")
+st.title("🖐 Live Hand Tracking using MediaPipe")
+st.write("Real-time hand tracking using your browser webcam!")
 
-class handDetector():
-    def __init__(self, mode=False, maxHands=2, detectionCon=0.5, trackCon=0.5):
-        self.mode = mode
-        self.maxHands = maxHands
-        self.detectionCon = detectionCon
-        self.trackCon = trackCon
+# ---------------- WebRTC Processor ----------------
+detector = handDetector()
 
-        # Initialize Mediapipe Hands with keyword arguments (for new versions)
-        self.mpHands = mp.solutions.hands
-        self.hands = self.mpHands.Hands(
-            static_image_mode=self.mode,
-            max_num_hands=self.maxHands,
-            min_detection_confidence=self.detectionCon,
-            min_tracking_confidence=self.trackCon
-        )
-        self.mpDraw = mp.solutions.drawing_utils
-
-    def findHands(self, img, draw=True):
-        imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        self.results = self.hands.process(imgRGB)
-
-        if self.results.multi_hand_landmarks:
-            for handLms in self.results.multi_hand_landmarks:
-                if draw:
-                    self.mpDraw.draw_landmarks(
-                        img, handLms, self.mpHands.HAND_CONNECTIONS)
+class VideoProcessor(VideoProcessorBase):
+    def recv(self, frame):
+        img = frame.to_ndarray(format="bgr24")
+        img = detector.findHands(img)
         return img
 
-    def findPosition(self, img, handNo=0, draw=True):
-        lmList = []
-        if self.results.multi_hand_landmarks:
-            myHand = self.results.multi_hand_landmarks[handNo]
-            for id, lm in enumerate(myHand.landmark):
-                h, w, c = img.shape
-                cx, cy = int(lm.x * w), int(lm.y * h)
-                lmList.append([id, cx, cy])
-                if draw:
-                    cv2.circle(img, (cx, cy), 7, (255, 0, 255), cv2.FILLED)
-        return lmList
+# ---------------- WebRTC Streamer ----------------
+RTC_CONFIGURATION = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
 
-
-def main():
-    pTime = 0
-    cTime = 0
-
-    # Use default webcam (change to 1 if using external)
-    cap = cv2.VideoCapture(0)
-
-    detector = handDetector()
-
-    while True:
-        success, img = cap.read()
-        img = cv2.flip(img, 1)  # Mirror view for natural display
-        img = detector.findHands(img)
-        lmList = detector.findPosition(img, draw=False)
-
-        if len(lmList) != 0:
-            print("Thumb Tip Coordinates:", lmList[4])  # Example: thumb tip
-
-        # FPS Calculation
-        cTime = time.time()
-        fps = 1 / (cTime - pTime) if cTime != pTime else 0
-        pTime = cTime
-
-        cv2.putText(img, f'FPS: {int(fps)}', (10, 70),
-                    cv2.FONT_HERSHEY_PLAIN, 3, (255, 0, 255), 3)
-
-        cv2.imshow("Hand Tracking", img)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
-
-
-if __name__ == "__main__":
-    main()
+webrtc_streamer(
+    key="handtracking",
+    video_processor_factory=VideoProcessor,
+    rtc_configuration=RTC_CONFIGURATION,
+    media_stream_constraints={"video": True, "audio": False},
+    async_processing=True
+)
